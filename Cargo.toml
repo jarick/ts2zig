@@ -4,6 +4,7 @@ members = [
     "crates/ts2zig-core",
     "crates/ts2zig-ir-hir",
     "crates/ts2zig-ir-mir",
+    "crates/ts2zig-passes",
 ]
 
 [workspace.package]

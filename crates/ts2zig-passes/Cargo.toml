@@ -1,0 +1,13 @@
+[package]
+name = "ts2zig-passes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Transformation passes for ts2zig (HIR→HIR lowers, HIR→MIR, monomorphize)"
+
+[dependencies]
+ts2zig-core = { path = "../ts2zig-core" }
+ts2zig-ir-hir = { path = "../ts2zig-ir-hir" }
+ts2zig-ir-mir = { path = "../ts2zig-ir-mir" }
