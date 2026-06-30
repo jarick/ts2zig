@@ -682,6 +682,7 @@ mod tests {
             mutable: true,
             visibility: ts2zig_core::Visibility::Public,
             export_name: None,
+            init: None,
         }));
         let text = prog.dump_text();
         assert!(text.contains("global"));

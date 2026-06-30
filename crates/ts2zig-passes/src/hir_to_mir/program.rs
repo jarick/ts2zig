@@ -5,8 +5,8 @@ use ts2zig_core::{
 };
 use ts2zig_ir_hir::{HirClass, HirDecl, HirField, HirFunction, HirProgram, HirStmt};
 use ts2zig_ir_mir::{
-    FunctionEffects, FunctionKind, MirBody, MirDecl, MirFieldDecl, MirFunctionDecl, MirImport,
-    MirParam, MirProgram, MirStructDecl,
+    FunctionEffects, FunctionKind, MirBlock, MirBody, MirDecl, MirFieldDecl, MirFunctionDecl,
+    MirGlobalDecl, MirImport, MirParam, MirProgram, MirStmt, MirStructDecl,
 };
 
 use crate::PassContext;
@@ -32,6 +32,8 @@ pub fn convert_function(
         converter.convert_block_with_shared_struct_ids(&f.body, struct_id_map, next_struct_id, ctx);
 
     let params: Vec<MirParam> = build_params(&f.params, strings, symbols);
+    let can_throw = body_can_throw(&f.body);
+    let throws = infer_throws(&block, can_throw, f.throws);
 
     MirFunctionDecl {
         id,
@@ -39,13 +41,43 @@ pub fn convert_function(
         export_name,
         params,
         ret: f.ret,
-        throws: None,
+        throws,
         body: MirBody { locals, block },
         kind: FunctionKind::Plain,
         effects: FunctionEffects {
-            can_throw: body_can_throw(&f.body),
+            can_throw,
             is_async: f.is_async,
         },
+    }
+}
+
+fn infer_throws(block: &MirBlock, can_throw: bool, declared: Option<TypeId>) -> Option<TypeId> {
+    if let Some(ty) = declared {
+        return Some(ty);
+    }
+    if !can_throw {
+        return None;
+    }
+    first_throw_err_ty(block)
+}
+
+fn first_throw_err_ty(block: &MirBlock) -> Option<TypeId> {
+    block.stmts.iter().find_map(stmt_throw_err_ty)
+}
+
+fn stmt_throw_err_ty(stmt: &MirStmt) -> Option<TypeId> {
+    match stmt {
+        MirStmt::Throw { error_ty, .. } => Some(*error_ty),
+        MirStmt::If {
+            then_block,
+            else_block,
+            ..
+        } => first_throw_err_ty(then_block)
+            .or_else(|| else_block.as_ref().and_then(first_throw_err_ty)),
+        MirStmt::While { body, .. } | MirStmt::ForOf { body, .. } | MirStmt::ForIn { body, .. } => {
+            first_throw_err_ty(body)
+        }
+        _ => None,
     }
 }
 
@@ -240,10 +272,31 @@ fn convert_decl(
         }
         HirDecl::TypeAlias { .. }
         | HirDecl::Enum { .. }
-        | HirDecl::Global { .. }
         | HirDecl::Interface { .. }
         | HirDecl::Namespace { .. } => None,
+        HirDecl::Global { name, ty, init } => Some(MirDecl::Global(MirGlobalDecl {
+            name: *name,
+            ty: *ty,
+            mutable: false,
+            visibility: Visibility::Public,
+            export_name: None,
+            init: lower_hir_init(init, *ty),
+        })),
     }
+}
+
+fn lower_hir_init(
+    init: &Option<ts2zig_ir_hir::HirExpr>,
+    ty: TypeId,
+) -> Option<ts2zig_ir_mir::MirExpr> {
+    let expr = init.as_ref()?;
+    if let ts2zig_ir_hir::HirExpr::Int(v) = expr {
+        return Some(ts2zig_ir_mir::MirExpr::Int {
+            value: i128::from(*v),
+            ty,
+        });
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]

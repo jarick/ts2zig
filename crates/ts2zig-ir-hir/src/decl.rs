@@ -34,12 +34,30 @@ pub struct HirFunction {
     pub name: SymbolId,
     pub params: Vec<HirParam>,
     pub ret: TypeId,
+    pub throws: Option<TypeId>,
     pub body: Vec<HirStmt>,
     pub is_async: bool,
     pub is_generator: bool,
     pub is_exported: bool,
     pub type_params: Vec<GenericParamId>,
     pub async_info: Option<HirAsyncInfo>,
+}
+
+impl Default for HirFunction {
+    fn default() -> Self {
+        Self {
+            name: SymbolId::from_raw(0),
+            params: Vec::new(),
+            ret: TypeId::from_raw(0),
+            throws: None,
+            body: Vec::new(),
+            is_async: false,
+            is_generator: false,
+            is_exported: false,
+            type_params: Vec::new(),
+            async_info: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

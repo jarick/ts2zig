@@ -93,6 +93,7 @@ mod tests {
             name: SymbolId::from_raw(1),
             params: vec![],
             ret: TypeId::from_raw(2),
+            throws: None,
             body: vec![],
             is_async: false,
             is_generator: false,

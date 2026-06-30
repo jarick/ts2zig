@@ -983,6 +983,7 @@ fn convert_function_nested_let_in_if_appears_in_body_locals() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::If {
             cond: HirExpr::Bool(true),
             then: Box::new(HirStmt::Let {
@@ -1027,6 +1028,7 @@ fn convert_function_nested_let_in_while_appears_in_body_locals() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::While {
             cond: HirExpr::Bool(true),
             body: Box::new(HirStmt::Let {
@@ -1069,6 +1071,7 @@ fn convert_function_nested_let_in_forof_appears_in_body_locals() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::ForOf {
             binding: LocalId::from_raw(20),
             iter: int_lit(0),
@@ -1675,6 +1678,7 @@ fn convert_function_basic_shape() {
             ty: unit_ty(),
         }],
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return { value: None }],
         is_async: false,
         is_generator: false,
@@ -1716,6 +1720,7 @@ fn convert_function_let_after_params_gets_fresh_id() {
             },
         ],
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Let {
             id: LocalId::from_raw(5),
             name: SymbolId::from_raw(99),
@@ -1761,6 +1766,7 @@ fn convert_function_marks_async_effect() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: Vec::new(),
         is_async: true,
         is_generator: false,
@@ -1794,6 +1800,7 @@ fn convert_function_body_references_param_id_resolves_to_param() {
             ty: unit_ty(),
         }],
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Expr {
             expr: HirExpr::Local {
                 id: LocalId::from_raw(0),
@@ -1854,6 +1861,7 @@ fn convert_program_assigns_distinct_function_ids() {
             name: SymbolId::from_raw(i + 1),
             params: Vec::new(),
             ret: unit_ty(),
+            throws: None,
             body: vec![HirStmt::Return { value: None }],
             is_async: false,
             is_generator: false,
@@ -1911,6 +1919,7 @@ fn convert_program_struct_id_consistent_across_functions_for_same_type() {
         name: SymbolId::from_raw(name),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return {
             value: Some(HirExpr::StructLiteral {
                 ty,
@@ -1969,6 +1978,7 @@ fn convert_program_class_methods_use_method_function_kind() {
                 ty: unit_ty(),
             }],
             ret: unit_ty(),
+            throws: None,
             body: vec![HirStmt::Return { value: None }],
             is_async: false,
             is_generator: false,
@@ -2025,6 +2035,7 @@ fn convert_program_class_struct_id_shared_with_new_and_struct_literal() {
         name: SymbolId::from_raw(2),
         params: Vec::new(),
         ret: class_ty,
+        throws: None,
         body: vec![
             HirStmt::Expr {
                 expr: HirExpr::New {
@@ -2095,6 +2106,7 @@ fn convert_program_class_struct_id_shared_even_when_function_decl_comes_first() 
         name: SymbolId::from_raw(2),
         params: Vec::new(),
         ret: class_ty,
+        throws: None,
         body: vec![HirStmt::Expr {
             expr: HirExpr::New {
                 callee: Box::new(HirExpr::Global {
@@ -2164,6 +2176,7 @@ fn body_can_throw_propagates_through_struct_literal_fields() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body,
         is_async: false,
         is_generator: false,
@@ -2205,6 +2218,7 @@ fn body_can_throw_stays_false_for_plain_struct_literal() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body,
         is_async: false,
         is_generator: false,
@@ -2259,6 +2273,7 @@ fn body_can_throw_propagates_through_assignment_target() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body,
         is_async: false,
         is_generator: false,
@@ -2317,6 +2332,7 @@ fn body_can_throw_propagates_through_assignment_target_index() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body,
         is_async: false,
         is_generator: false,
@@ -2377,6 +2393,7 @@ fn convert_function_await_dest_appears_in_body_locals() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return {
             value: Some(HirExpr::Await {
                 expr: Box::new(int_lit(1)),
@@ -2419,6 +2436,7 @@ fn convert_function_new_alloc_appears_in_body_locals() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return {
             value: Some(HirExpr::New {
                 callee: Box::new(HirExpr::Global {
@@ -2465,6 +2483,7 @@ fn convert_function_temp_locals_drained_only_once() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return {
             value: Some(HirExpr::Await {
                 expr: Box::new(int_lit(1)),
@@ -2506,6 +2525,7 @@ fn convert_function_can_throw_true_when_body_has_throw_stmt() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Throw { expr: int_lit(0) }],
         is_async: false,
         is_generator: false,
@@ -2539,6 +2559,7 @@ fn convert_function_can_throw_false_when_body_has_no_throw_stmt() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return { value: None }],
         is_async: false,
         is_generator: false,
@@ -2572,6 +2593,7 @@ fn convert_function_can_throw_recurses_into_nested_blocks() {
         name: SymbolId::from_raw(1),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::If {
             cond: HirExpr::Bool(true),
             then: Box::new(HirStmt::Throw { expr: int_lit(0) }),
@@ -2624,6 +2646,7 @@ fn convert_function_build_params_resolves_through_symbol_table() {
             },
         ],
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return { value: None }],
         is_async: false,
         is_generator: false,
@@ -2669,6 +2692,7 @@ fn convert_function_with_remap_uses_remap_only_for_call_sites() {
         name: SymbolId::from_raw(7),
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Expr {
             expr: HirExpr::Call {
                 callee: HirCallee::Function(FunctionId::from_raw(0)),
@@ -2841,6 +2865,7 @@ fn convert_program_class_method_with_no_params_is_skipped() {
             name: SymbolId::from_raw(100),
             params: Vec::new(),
             ret: unit_ty(),
+            throws: None,
             body: vec![HirStmt::Return { value: None }],
             is_async: false,
             is_generator: false,
@@ -2871,6 +2896,7 @@ fn convert_program_exported_function_resolves_name_through_symbol_table() {
         name: name_id,
         params: Vec::new(),
         ret: unit_ty(),
+        throws: None,
         body: vec![HirStmt::Return { value: None }],
         is_async: false,
         is_generator: false,
