@@ -67,4 +67,9 @@ fn dump_global(g: &MirGlobalDecl, d: &mut Dumper<'_>) {
         g.ty.raw(),
         g.mutable,
     ));
+    if let Some(init) = &g.init {
+        let mut tmp = Dumper::new(d.symbols);
+        super::expr::dump_expr_inline(init, &mut tmp);
+        d.line(&format!("  = {}", tmp.buf.trim_end()));
+    }
 }

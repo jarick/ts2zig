@@ -1,6 +1,7 @@
 use ts2zig_core::{FieldId, FunctionId, LocalId, StructId, SymbolId, TypeId, Visibility};
 
 use crate::body::MirBody;
+use crate::body::MirExpr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MirParam {
@@ -59,13 +60,14 @@ pub struct MirStructDecl {
     pub methods: Vec<MirFunctionDecl>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MirGlobalDecl {
     pub name: SymbolId,
     pub ty: TypeId,
     pub mutable: bool,
     pub visibility: Visibility,
     pub export_name: Option<String>,
+    pub init: Option<MirExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -226,6 +228,7 @@ mod tests {
             mutable: false,
             visibility: Visibility::Public,
             export_name: None,
+            init: None,
         };
         assert!(!g.mutable);
         assert_eq!(g.visibility, Visibility::Public);
@@ -256,6 +259,7 @@ mod tests {
             mutable: false,
             visibility: Visibility::Private,
             export_name: None,
+            init: None,
         };
         let _: MirDecl = f.into();
         let _: MirDecl = s.into();
