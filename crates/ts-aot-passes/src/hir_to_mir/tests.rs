@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ts_aot_core::{Atom, FieldId, FunctionId, LocalId, ModuleId, Span, TypeId, Visibility};
 use ts_aot_ir_hir::{
@@ -597,7 +597,9 @@ fn convert_expr_closure_returns_unit_and_diagnostics() {
     let mut cx = ctx();
     let expr = HirExpr::Closure {
         id: LocalId::from_raw(0),
+        params: Vec::new(),
         captures: Vec::new(),
+        body: Vec::new(),
         ty: unit_ty(),
     };
     assert_eq!(
@@ -993,6 +995,7 @@ fn convert_function_nested_let_in_if_appears_in_body_locals() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1033,6 +1036,7 @@ fn convert_function_nested_let_in_while_appears_in_body_locals() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1078,6 +1082,7 @@ fn convert_function_nested_let_in_forof_appears_in_body_locals() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1680,6 +1685,7 @@ fn convert_function_basic_shape() {
         FunctionId::from_raw(0),
         Some("f".to_owned()),
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1723,6 +1729,7 @@ fn convert_function_let_after_params_gets_fresh_id() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1760,6 +1767,7 @@ fn convert_function_marks_async_effect() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1795,6 +1803,7 @@ fn convert_function_body_references_param_id_resolves_to_param() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -1818,7 +1827,7 @@ fn convert_function_body_references_param_id_resolves_to_param() {
 fn convert_program_empty_keeps_module() {
     let hir = empty_hir();
     let mut cx = ctx();
-    let mir = convert_program(&hir, &mut cx);
+    let mir = convert_program(&hir, &mut cx, &HashSet::new());
     assert_eq!(mir.module, hir.module);
     assert_eq!(mir.decl_count(), 0);
 }
@@ -1841,7 +1850,7 @@ fn convert_program_assigns_distinct_function_ids() {
         }));
     }
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let functions: Vec<_> = mir.functions().collect();
     assert_eq!(functions.len(), 3);
     let ids: std::collections::HashSet<_> = functions.iter().map(|f| f.id).collect();
@@ -1870,7 +1879,7 @@ fn convert_program_assigns_distinct_struct_ids() {
         }));
     }
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let structs: Vec<_> = mir.structs().collect();
     assert_eq!(structs.len(), 2);
     let ids: std::collections::HashSet<_> = structs.iter().map(|s| s.id).collect();
@@ -1901,7 +1910,7 @@ fn convert_program_struct_id_consistent_across_functions_for_same_type() {
     prog.push_decl(HirDecl::Function(make_fn(1, shared_ty)));
     prog.push_decl(HirDecl::Function(make_fn(2, shared_ty)));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let mut struct_literal_ids: Vec<ts_aot_core::StructId> = Vec::new();
     for func in mir.functions() {
         for s in &func.body.block.stmts {
@@ -1958,7 +1967,7 @@ fn convert_program_class_methods_use_method_function_kind() {
         ty: unit_ty(),
     };
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let struct_decl = mir.structs().next().expect("expected one struct");
     let expected_owner = struct_decl.id;
     assert_eq!(struct_decl.methods.len(), 1);
@@ -2023,7 +2032,7 @@ fn convert_program_class_struct_id_shared_with_new_and_struct_literal() {
         async_info: None,
     }));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let struct_decl = mir.structs().next().expect("expected one struct");
     let class_struct_id = struct_decl.id;
     let mut new_id: Option<ts_aot_core::StructId> = None;
@@ -2095,7 +2104,7 @@ fn convert_program_class_struct_id_shared_even_when_function_decl_comes_first() 
         type_params: Vec::new(),
     }));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let struct_decl = mir.structs().next().expect("expected one struct");
     let class_struct_id = struct_decl.id;
     let func = mir.functions().next().expect("expected one function");
@@ -2150,6 +2159,7 @@ fn body_can_throw_propagates_through_struct_literal_fields() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut struct_id_map,
         &mut next_struct_id,
         &mut cx,
@@ -2188,6 +2198,7 @@ fn body_can_throw_stays_false_for_plain_struct_literal() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut struct_id_map,
         &mut next_struct_id,
         &mut cx,
@@ -2239,6 +2250,7 @@ fn body_can_throw_propagates_through_assignment_target() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut struct_id_map,
         &mut next_struct_id,
         &mut cx,
@@ -2294,6 +2306,7 @@ fn body_can_throw_propagates_through_assignment_target_index() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut struct_id_map,
         &mut next_struct_id,
         &mut cx,
@@ -2319,7 +2332,7 @@ fn convert_program_preserves_import_module_path_from_atom() {
         alias: None,
     });
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     assert_eq!(mir.imports.len(), 1);
     assert_eq!(mir.imports[0].module, "./other");
     assert_eq!(mir.imports[0].symbol, Atom::new_inline("7"));
@@ -2352,6 +2365,7 @@ fn convert_function_await_emits_mir_await_expr_without_body_locals() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2396,6 +2410,7 @@ fn convert_function_new_alloc_appears_in_body_locals() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2435,6 +2450,7 @@ fn convert_function_temp_locals_drained_only_once() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2468,6 +2484,7 @@ fn convert_function_can_throw_true_when_body_has_throw_stmt() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2498,6 +2515,7 @@ fn convert_function_can_throw_false_when_body_has_no_throw_stmt() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2532,6 +2550,7 @@ fn convert_function_can_throw_recurses_into_nested_blocks() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2575,6 +2594,7 @@ fn convert_function_build_params_preserves_param_atom_name() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2627,6 +2647,7 @@ fn convert_function_with_remap_uses_remap_only_for_call_sites() {
         FunctionId::from_raw(5),
         None,
         remap,
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -2786,7 +2807,7 @@ fn convert_program_class_method_with_no_params_is_skipped() {
         type_params: Vec::new(),
     }));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let struct_decl = mir.structs().next().expect("expected one struct");
     assert!(
         struct_decl.methods.is_empty(),
@@ -2811,7 +2832,7 @@ fn convert_program_exported_function_uses_atom_name_as_export_name() {
         async_info: None,
     }));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let func = mir.functions().next().expect("expected one function");
     assert_eq!(
         func.export_name.as_deref(),
@@ -3058,6 +3079,7 @@ fn body_can_throw_propagates_through_if_condition_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3096,6 +3118,7 @@ fn body_can_throw_propagates_through_while_condition_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3135,6 +3158,7 @@ fn body_can_throw_propagates_through_for_of_iter_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3176,6 +3200,7 @@ fn body_can_throw_propagates_through_switch_discriminant_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3218,6 +3243,7 @@ fn body_can_throw_propagates_through_catch_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3257,6 +3283,7 @@ fn body_can_throw_propagates_through_finally_call() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3292,6 +3319,7 @@ fn body_can_throw_await_alone_is_throwing() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3331,6 +3359,7 @@ fn body_can_throw_new_alone_is_throwing() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3366,6 +3395,7 @@ fn body_can_throw_yield_alone_is_throwing() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3385,7 +3415,7 @@ fn convert_global_with_int_init_lowers_to_int() {
         init: Some(int_lit(42)),
     });
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let g = mir.globals().next().expect("one global");
     assert!(matches!(g.init, Some(MirExpr::Int { value: 42, .. })));
     assert!(!cx.has_errors(), "constant init must not error");
@@ -3400,7 +3430,7 @@ fn convert_global_with_string_init_lowers_to_string() {
         init: Some(HirExpr::String(Atom::new_inline("hi"))),
     });
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let g = mir.globals().next().expect("one global");
     assert!(matches!(g.init, Some(MirExpr::String { .. })));
 }
@@ -3418,7 +3448,7 @@ fn convert_global_with_complex_init_emits_warning_and_drops_init() {
         }),
     });
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let g = mir.globals().next().expect("one global");
     assert!(
         g.init.is_none(),
@@ -3455,7 +3485,7 @@ fn convert_global_does_not_consume_function_id() {
         async_info: None,
     }));
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let f = mir.functions().next().expect("one function");
     assert_eq!(
         f.id,
@@ -3473,7 +3503,7 @@ fn convert_global_visibility_defaults_to_public() {
         init: Some(int_lit(0)),
     });
     let mut cx = ctx();
-    let mir = convert_program(&prog, &mut cx);
+    let mir = convert_program(&prog, &mut cx, &HashSet::new());
     let g = mir.globals().next().expect("one global");
     assert_eq!(
         g.visibility,
@@ -3508,6 +3538,7 @@ fn infer_throws_is_none_for_call_only_function() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3552,6 +3583,7 @@ fn infer_throws_is_none_for_if_with_throwing_cond_only() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3589,6 +3621,7 @@ fn infer_throws_uses_real_source_when_throwing_typed_expr() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3621,6 +3654,7 @@ fn infer_throws_respects_declared_over_inferred() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
@@ -3652,6 +3686,7 @@ fn infer_throws_uses_sentinel_for_primitive_thrown_expr() {
         FunctionId::from_raw(0),
         None,
         HashMap::new(),
+        &HashMap::new(),
         &mut empty_struct_ids(),
         &mut empty_next_struct(),
         &mut cx,
