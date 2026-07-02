@@ -415,7 +415,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ts2zig-core"
+name = "ts-aot-core"
 version = "0.1.0"
 dependencies = [
  "oxc_span",
@@ -423,26 +423,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "ts2zig-ir-hir"
+name = "ts-aot-ir-hir"
 version = "0.1.0"
 dependencies = [
- "ts2zig-core",
+ "ts-aot-core",
 ]
 
 [[package]]
-name = "ts2zig-ir-mir"
+name = "ts-aot-ir-mir"
 version = "0.1.0"
 dependencies = [
- "ts2zig-core",
+ "ts-aot-core",
 ]
 
 [[package]]
-name = "ts2zig-passes"
+name = "ts-aot-passes"
 version = "0.1.0"
 dependencies = [
- "ts2zig-core",
- "ts2zig-ir-hir",
- "ts2zig-ir-mir",
+ "ts-aot-core",
+ "ts-aot-ir-hir",
+ "ts-aot-ir-mir",
 ]
 
 [[package]]

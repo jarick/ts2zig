@@ -30,7 +30,7 @@ jobs:
         with:
           workspaces: >-
             .
-            crates/ts2zig-core -> target
+            crates/ts-aot-core -> target
 
       - uses: extractions/setup-just@v2
 
@@ -58,7 +58,7 @@ jobs:
         with:
           workspaces: >-
             .
-            crates/ts2zig-core -> target
+            crates/ts-aot-core -> target
 
       - uses: extractions/setup-just@v2
 

@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/ts2zig-core",
-    "crates/ts2zig-ir-hir",
-    "crates/ts2zig-ir-mir",
-    "crates/ts2zig-passes",
+    "crates/ts-aot-core",
+    "crates/ts-aot-ir-hir",
+    "crates/ts-aot-ir-mir",
+    "crates/ts-aot-passes",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://example.invalid/ts2zig"
+repository = "https://example.invalid/ts-aot"
 publish = false
 
 [workspace.dependencies]

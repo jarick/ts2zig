@@ -1,0 +1,13 @@
+[package]
+name = "ts-aot-passes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Transformation passes for ts-aot (HIR→HIR lowers, HIR→MIR, monomorphize)"
+
+[dependencies]
+ts-aot-core = { path = "../ts-aot-core" }
+ts-aot-ir-hir = { path = "../ts-aot-ir-hir" }
+ts-aot-ir-mir = { path = "../ts-aot-ir-mir" }

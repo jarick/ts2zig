@@ -1,0 +1,10 @@
+[package]
+name = "ts-aot-ir-hir"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ts-aot-core = { path = "../ts-aot-core" }
