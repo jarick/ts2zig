@@ -1,9 +1,13 @@
-use ts_aot_core::{Atom, ModuleId, TypeTable};
+use std::collections::HashSet;
+
+use ts_aot_core::{Atom, LocalId, ModuleId, TypeTable};
 use ts_aot_ir_hir::{
-    HirCallee, HirDecl, HirEnumVariant, HirExpr, HirFunction, HirProgram, HirStmt,
+    HirCallee, HirDecl, HirEnumVariant, HirExpr, HirFunction, HirParam, HirProgram, HirStmt,
 };
 use ts_aot_ir_mir::{MirDecl, MirExpr, MirGlobalDecl, MirStmt};
-use ts_aot_passes::{PassContext, convert_program, lower_async, lower_enums, lower_result};
+use ts_aot_passes::{
+    PassContext, convert_program, lower_async, lower_closures, lower_enums, lower_result,
+};
 
 fn fixture() -> (TypeTable, PassContext) {
     let types = TypeTable::new();
@@ -40,7 +44,7 @@ fn convert_program_preserves_global_with_int_init() {
         init: Some(HirExpr::Int(42)),
     });
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
 
     assert_eq!(mir.declarations.len(), 1);
     let MirDecl::Global(g) = &mir.declarations[0] else {
@@ -70,7 +74,7 @@ fn lower_enums_then_convert_program_emits_globals_with_values() {
 
     lower_enums(&mut hir, &mut types, &mut ctx);
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
 
     let globals: Vec<&MirGlobalDecl> = mir.globals().collect();
     assert_eq!(
@@ -119,7 +123,7 @@ fn convert_function_with_throw_sets_throws() {
         async_info: None,
     }));
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
     let fns: Vec<_> = mir.functions().collect();
     assert_eq!(fns.len(), 1);
     let f = fns[0];
@@ -151,7 +155,7 @@ fn convert_function_without_throw_leaves_throws_none() {
         async_info: None,
     }));
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
     let f = mir.functions().next().expect("one function");
     assert!(f.throws.is_none());
     assert!(!f.effects.can_throw);
@@ -178,7 +182,7 @@ fn end_to_end_lower_result_rewrites_throw_to_return_result_err() {
         async_info: None,
     }));
 
-    let mut mir = convert_program(&hir, &mut ctx);
+    let mut mir = convert_program(&hir, &mut ctx, &HashSet::new());
     lower_result(&mut mir);
 
     let f = mir.functions().next().expect("one function");
@@ -199,7 +203,7 @@ fn end_to_end_enum_through_hir_to_mir_dump_includes_values() {
         .push(build_enum_decl("E", vec![("A", None), ("B", None)]));
 
     lower_enums(&mut hir, &mut types, &mut ctx);
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
     let text = mir.dump_text();
     assert!(text.contains("global"), "expected global in dump:\n{text}");
 
@@ -289,7 +293,7 @@ fn enum_member_use_in_function_body_is_rewritten_to_namespaced_global() {
     }));
 
     lower_enums(&mut hir, &mut types, &mut ctx);
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
 
     let fns: Vec<_> = mir.functions().collect();
     assert_eq!(fns.len(), 1);
@@ -380,7 +384,7 @@ fn end_to_end_lower_async_strips_promise_resolve_but_keeps_mir_await() {
     assert_eq!(stats.inlined_promise_resolve, 1);
     assert_eq!(stats.cleared_async_info, 1);
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
     let f = mir.functions().next().expect("one function");
     let MirStmt::Return(Some(MirExpr::Await { expr: promise, .. })) = &f.body.block.stmts[0] else {
         panic!(
@@ -439,7 +443,7 @@ fn end_to_end_lower_async_keeps_non_promise_resolve_await_as_mir_state() {
         "still clears async_info on the function"
     );
 
-    let mir = convert_program(&hir, &mut ctx);
+    let mir = convert_program(&hir, &mut ctx, &HashSet::new());
     let f = mir.functions().next().expect("one function");
     let MirStmt::Return(Some(MirExpr::Await { .. })) = &f.body.block.stmts[0] else {
         panic!(
@@ -447,4 +451,258 @@ fn end_to_end_lower_async_keeps_non_promise_resolve_await_as_mir_state() {
             f.body.block.stmts
         );
     };
+}
+
+#[test]
+fn end_to_end_lower_closures_then_convert_program_resolves_indirect_global_callee() {
+    let (mut types, mut ctx) = fixture();
+    let i64_ty = types.intern(&ts_aot_core::Type::I64);
+
+    let outer_name = Atom::new_inline("outer");
+    let cb_local = LocalId::from_raw(0);
+    let outer = HirFunction {
+        name: outer_name.clone(),
+        params: Vec::new(),
+        ret: i64_ty,
+        throws: None,
+        body: vec![
+            HirStmt::Let {
+                id: cb_local,
+                name: Atom::new_inline("add"),
+                ty: i64_ty,
+                init: Some(HirExpr::Closure {
+                    id: cb_local,
+                    params: vec![HirParam {
+                        name: Atom::new_inline("x"),
+                        ty: i64_ty,
+                    }],
+                    captures: Vec::new(),
+                    body: vec![HirStmt::Return {
+                        value: Some(HirExpr::Local {
+                            id: LocalId::from_raw(1),
+                            ty: i64_ty,
+                        }),
+                    }],
+                    ty: i64_ty,
+                }),
+            },
+            HirStmt::Expr {
+                expr: HirExpr::Call {
+                    callee: HirCallee::Closure(cb_local),
+                    args: vec![HirExpr::Int(7)],
+                    ty: i64_ty,
+                },
+            },
+        ],
+        is_async: false,
+        is_generator: false,
+        is_exported: false,
+        type_params: Vec::new(),
+        async_info: None,
+    };
+
+    let mut hir = HirProgram::new(ModuleId::from_raw(0));
+    hir.declarations.push(HirDecl::Function(outer));
+
+    let result = lower_closures(&mut hir, &mut ctx);
+    let stats = &result.stats;
+    assert_eq!(stats.emitted_fns, 1);
+    assert_eq!(stats.deferred_capturing, 0);
+    assert!(
+        !ctx.has_errors(),
+        "lower_closures must not error on non-capturing closure"
+    );
+
+    let closure_names: HashSet<Atom> = result.closure_names.iter().cloned().collect();
+    let mir = convert_program(&hir, &mut ctx, &closure_names);
+    assert!(
+        !ctx.has_errors(),
+        "convert_program must not emit P0005 for rewritten closure call"
+    );
+
+    let fns: Vec<_> = mir.functions().collect();
+    assert_eq!(
+        fns.len(),
+        2,
+        "expected outer + one hoisted closure fn, got {} fns",
+        fns.len()
+    );
+
+    let hoisted = fns
+        .iter()
+        .find(|f| f.name.as_str().starts_with("__ts_aot_closure_"))
+        .expect("expected hoisted __ts_aot_closure_N fn in MIR");
+
+    let mut outer_mir: Option<&ts_aot_ir_mir::MirFunctionDecl> = None;
+    let mut hoisted_mir: Option<&ts_aot_ir_mir::MirFunctionDecl> = None;
+    for f in &fns {
+        if f.id == hoisted.id {
+            hoisted_mir = Some(f);
+        } else {
+            outer_mir = Some(f);
+        }
+    }
+    let outer_mir = outer_mir.expect("outer fn present");
+    let hoisted_id = hoisted_mir.unwrap().id;
+
+    let MirStmt::Expr(MirExpr::Call { callee, .. }) = &outer_mir.body.block.stmts[1] else {
+        panic!(
+            "outer fn second stmt must be Expr(Call) after lower_closures rewrite, got {:?}",
+            outer_mir.body.block.stmts[1]
+        );
+    };
+    assert_eq!(
+        *callee, hoisted_id,
+        "outer fn Call.callee must be the hoisted closure fn's FunctionId, got {callee:?}"
+    );
+}
+
+#[test]
+fn convert_program_does_not_resolve_user_global_name_through_closure_map() {
+    let (mut types, mut ctx) = fixture();
+    let i64_ty = types.intern(&ts_aot_core::Type::I64);
+    let fn_name = Atom::new_inline("caller");
+    let user_global_name = Atom::new_inline("realFn");
+
+    let mut hir = HirProgram::new(ModuleId::from_raw(0));
+    hir.declarations.push(HirDecl::Function(HirFunction {
+        name: fn_name.clone(),
+        params: Vec::new(),
+        ret: i64_ty,
+        throws: None,
+        body: vec![HirStmt::Expr {
+            expr: HirExpr::Call {
+                callee: HirCallee::Indirect(Box::new(HirExpr::Global {
+                    name: user_global_name.clone(),
+                    ty: i64_ty,
+                })),
+                args: vec![HirExpr::Int(1)],
+                ty: i64_ty,
+            },
+        }],
+        is_async: false,
+        is_generator: false,
+        is_exported: false,
+        type_params: Vec::new(),
+        async_info: None,
+    }));
+
+    let mut wrong_set: HashSet<Atom> = HashSet::new();
+    wrong_set.insert(user_global_name.clone());
+    let mir = convert_program(&hir, &mut ctx, &wrong_set);
+    let f = mir.functions().next().expect("one fn");
+
+    let MirStmt::Expr(MirExpr::Call { callee, .. }) = &f.body.block.stmts[0] else {
+        panic!("expected Expr(Call), got {:?}", f.body.block.stmts[0]);
+    };
+    assert_eq!(
+        *callee,
+        ts_aot_core::FunctionId::from_raw(u32::MAX),
+        "user global name must NOT be resolved as a closure call, even if its name was passed in the closure_names set; got {callee:?}"
+    );
+    assert!(
+        ctx.has_errors(),
+        "P0005 must be emitted for user global Indirect(Global(name)) — closure_map must not be a backdoor for arbitrary global names"
+    );
+    let diag = ctx
+        .diagnostics()
+        .iter()
+        .find(|d| d.code.as_str() == "P0005")
+        .expect("expected P0005");
+    assert!(
+        diag.message.contains("indirect"),
+        "P0005 message should mention 'indirect', got: {}",
+        diag.message
+    );
+}
+
+#[test]
+fn end_to_end_closure_in_global_init_is_preserved_as_function_reference() {
+    let (mut types, mut ctx) = fixture();
+    let i64_ty = types.intern(&ts_aot_core::Type::I64);
+    let closure_local = LocalId::from_raw(0);
+    let closure_name = Atom::new_inline("f");
+
+    let mut hir = HirProgram::new(ModuleId::from_raw(0));
+    hir.declarations.push(HirDecl::Global {
+        name: closure_name.clone(),
+        ty: i64_ty,
+        init: Some(HirExpr::Closure {
+            id: closure_local,
+            params: vec![HirParam {
+                name: Atom::from("x"),
+                ty: i64_ty,
+            }],
+            captures: Vec::new(),
+            body: vec![HirStmt::Return {
+                value: Some(HirExpr::Local {
+                    id: LocalId::from_raw(1),
+                    ty: i64_ty,
+                }),
+            }],
+            ty: i64_ty,
+        }),
+    });
+
+    let result = lower_closures(&mut hir, &mut ctx);
+    assert_eq!(result.stats.emitted_fns, 1);
+    assert!(
+        !ctx.has_errors(),
+        "lower_closures must not error on global-init non-capturing closure"
+    );
+
+    let HirDecl::Global {
+        init: Some(init), ..
+    } = &hir.declarations[0]
+    else {
+        panic!(
+            "global decl must retain Some(init) after lower_closures hoist; got {:?}",
+            hir.declarations[0]
+        );
+    };
+    let HirExpr::Global { name, .. } = init else {
+        panic!(
+            "global init must be rewritten to HirExpr::Global pointing at hoisted fn, got {init:?}"
+        );
+    };
+    assert!(
+        name.as_str().starts_with("__ts_aot_closure_"),
+        "rewrite must point at __ts_aot_closure_N, got {name:?}"
+    );
+
+    let closure_names: HashSet<Atom> = result.closure_names.iter().cloned().collect();
+    let mir = convert_program(&hir, &mut ctx, &closure_names);
+    assert!(
+        !ctx.has_errors(),
+        "convert_program must not emit P0006 for HirExpr::Global global init; diagnostics: {:?}",
+        ctx.diagnostics()
+    );
+    assert!(
+        !ctx.diagnostics().iter().any(|d| d.code.as_str() == "P0006"),
+        "global init that resolves to a function reference must NOT emit P0006"
+    );
+
+    let globals: Vec<_> = mir.globals().collect();
+    assert_eq!(
+        globals.len(),
+        1,
+        "global f must survive lower_closures + convert_program, got {} globals",
+        globals.len()
+    );
+    let g = globals[0];
+    assert_eq!(g.name, closure_name);
+    let Some(mir_init) = &g.init else {
+        panic!(
+            "global f.init must be preserved as function reference, not dropped to None (this is the bug the regression test guards against)"
+        );
+    };
+    let MirExpr::Global(referenced) = mir_init else {
+        panic!(
+            "global f.init must be MirExpr::Global pointing at hoisted closure fn, got {mir_init:?}"
+        );
+    };
+    assert!(
+        referenced.as_str().starts_with("__ts_aot_closure_"),
+        "MirExpr::Global.name must point at hoisted closure fn, got {referenced:?}"
+    );
 }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ts_aot_core::{Atom, FunctionId, LocalId, Span, StructId, TypeId};
-use ts_aot_ir_hir::HirCallee;
+use ts_aot_ir_hir::{HirCallee, HirExpr};
 use ts_aot_ir_mir::{MirExpr, MirLocalDecl};
 
 use crate::PassContext;
@@ -11,6 +11,7 @@ pub struct ExprConverter {
     pub(super) local_map: HashMap<LocalId, LocalId>,
     pub(super) local_names: HashMap<LocalId, Atom>,
     pub(super) function_remap: HashMap<FunctionId, FunctionId>,
+    pub(super) closure_name_to_function: HashMap<Atom, FunctionId>,
     pub(super) next_local: u32,
     pub(super) temp_locals: Vec<MirLocalDecl>,
     pub(super) struct_ids: HashMap<TypeId, StructId>,
@@ -36,6 +37,7 @@ impl ExprConverter {
             local_map: HashMap::new(),
             local_names: HashMap::new(),
             function_remap: remap,
+            closure_name_to_function: HashMap::new(),
             next_local,
             temp_locals: Vec::new(),
             struct_ids: HashMap::new(),
@@ -108,7 +110,12 @@ impl ExprConverter {
     ) -> FunctionId {
         match callee {
             HirCallee::Function(fid) => self.function_remap.get(fid).copied().unwrap_or(*fid),
-            HirCallee::Indirect(_) => {
+            HirCallee::Indirect(inner) => {
+                if let HirExpr::Global { name, .. } = inner.as_ref()
+                    && let Some(&fid) = self.closure_name_to_function.get(name)
+                {
+                    return fid;
+                }
                 ctx.error(
                     "P0005",
                     "indirect (computed) callee is not yet supported in HIR→MIR",
@@ -119,7 +126,7 @@ impl ExprConverter {
             HirCallee::Closure(_) => {
                 ctx.error(
                     "P0005",
-                    "closure callee is not yet supported in HIR→MIR",
+                    "closure callee should have been rewritten to Indirect(Global) by lower_closures before HIR→MIR",
                     Span::new(0, 0),
                 );
                 PLACEHOLDER_FUNCTION

@@ -1,5 +1,8 @@
 use ts_aot_core::{Atom, FieldId, FunctionId, LocalId, TypeId};
 
+use crate::decl::HirParam;
+use crate::stmt::HirStmt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirBinaryOp {
     Add,
@@ -100,7 +103,9 @@ pub enum HirExpr {
     },
     Closure {
         id: LocalId,
+        params: Vec<HirParam>,
         captures: Vec<HirExpr>,
+        body: Vec<HirStmt>,
         ty: TypeId,
     },
     Await {

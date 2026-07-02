@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use ts_aot_core::{FieldId, FunctionId, LocalId, Span, StructId, TypeId, Visibility};
+use ts_aot_core::{Atom, FieldId, FunctionId, LocalId, Span, StructId, TypeId, Visibility};
 use ts_aot_ir_hir::{HirClass, HirDecl, HirExpr, HirFunction, HirProgram, HirStmt, HirSwitchCase};
 use ts_aot_ir_mir::{
     FunctionEffects, FunctionKind, MirBody, MirDecl, MirExpr, MirFieldDecl, MirFunctionDecl,
@@ -16,6 +16,7 @@ pub fn convert_function(
     id: FunctionId,
     export_name: Option<String>,
     function_remap: HashMap<FunctionId, FunctionId>,
+    name_to_function: &HashMap<Atom, FunctionId>,
     struct_id_map: &mut HashMap<TypeId, StructId>,
     next_struct_id: &mut u32,
     ctx: &mut PassContext,
@@ -23,6 +24,7 @@ pub fn convert_function(
     let param_count = f.params.len();
     let mut converter =
         ExprConverter::with_function_remap_and_offset(function_remap, param_count as u32);
+    converter.closure_name_to_function = name_to_function.clone();
     converter.seed_params(param_count as u32);
     let (block, locals) =
         converter.convert_block_with_shared_struct_ids(&f.body, struct_id_map, next_struct_id, ctx);
@@ -59,7 +61,11 @@ fn build_params(params: &[ts_aot_ir_hir::HirParam]) -> Vec<MirParam> {
         .collect()
 }
 
-pub fn convert_program(hir: &HirProgram, ctx: &mut PassContext) -> MirProgram {
+pub fn convert_program(
+    hir: &HirProgram,
+    ctx: &mut PassContext,
+    closure_names: &HashSet<Atom>,
+) -> MirProgram {
     let mut mir = MirProgram::new(hir.module);
     for export in &hir.exports {
         mir.exports.push(ts_aot_ir_mir::MirExport {
@@ -77,17 +83,44 @@ pub fn convert_program(hir: &HirProgram, ctx: &mut PassContext) -> MirProgram {
     let mut next_function_id: u32 = 0;
     let mut struct_id_map: HashMap<TypeId, StructId> = HashMap::new();
     let mut next_struct_id: u32 = 0;
+    let mut closure_name_to_function: HashMap<Atom, FunctionId> = HashMap::new();
+    let mut pre_id: u32 = 0;
     for decl in &hir.declarations {
-        if let HirDecl::Class(c) = decl {
-            let sid = StructId::from_raw(next_struct_id);
-            next_struct_id += 1;
-            struct_id_map.insert(c.ty, sid);
+        match decl {
+            HirDecl::Function(f) => {
+                let id = FunctionId::from_raw(pre_id);
+                if closure_names.contains(&f.name) {
+                    closure_name_to_function.insert(f.name.clone(), id);
+                }
+                pre_id += 1;
+            }
+            HirDecl::Class(c) => {
+                let sid = StructId::from_raw(next_struct_id);
+                next_struct_id += 1;
+                struct_id_map.insert(c.ty, sid);
+                for method in &c.methods {
+                    if method.params.is_empty() {
+                        continue;
+                    }
+                    let id = FunctionId::from_raw(pre_id);
+                    if closure_names.contains(&method.name) {
+                        closure_name_to_function.insert(method.name.clone(), id);
+                    }
+                    pre_id += 1;
+                }
+            }
+            HirDecl::TypeAlias { .. }
+            | HirDecl::Interface { .. }
+            | HirDecl::Enum { .. }
+            | HirDecl::Global { .. }
+            | HirDecl::Namespace { .. } => {}
         }
     }
     for decl in &hir.declarations {
         if let Some(mir_decl) = convert_decl(
             decl,
             &mut next_function_id,
+            &closure_name_to_function,
             &mut struct_id_map,
             &mut next_struct_id,
             ctx,
@@ -102,6 +135,7 @@ pub fn convert_program(hir: &HirProgram, ctx: &mut PassContext) -> MirProgram {
 fn convert_decl(
     decl: &HirDecl,
     next_function_id: &mut u32,
+    closure_name_to_function: &HashMap<Atom, FunctionId>,
     struct_id_map: &mut HashMap<TypeId, StructId>,
     next_struct_id: &mut u32,
     ctx: &mut PassContext,
@@ -120,6 +154,7 @@ fn convert_decl(
                 id,
                 export_name,
                 HashMap::new(),
+                closure_name_to_function,
                 struct_id_map,
                 next_struct_id,
                 ctx,
@@ -128,15 +163,13 @@ fn convert_decl(
         HirDecl::Class(c) => Some(MirDecl::Struct(convert_struct(
             c,
             next_function_id,
+            closure_name_to_function,
             struct_id_map,
             next_struct_id,
             ctx,
         ))),
         HirDecl::TypeAlias { .. } | HirDecl::Interface { .. } => None,
-        HirDecl::Enum { .. } => {
-            // Lowered by LowerEnums pass before this.
-            None
-        }
+        HirDecl::Enum { .. } => None,
         HirDecl::Global { name, ty, init } => {
             let mir_init = init.as_ref().and_then(|e| lower_global_init(e, ctx));
             Some(MirDecl::Global(MirGlobalDecl {
@@ -156,6 +189,7 @@ fn convert_decl(
 fn convert_struct(
     c: &HirClass,
     next_function_id: &mut u32,
+    closure_name_to_function: &HashMap<Atom, FunctionId>,
     struct_id_map: &mut HashMap<TypeId, StructId>,
     next_struct_id: &mut u32,
     ctx: &mut PassContext,
@@ -193,6 +227,7 @@ fn convert_struct(
             id,
             export_name,
             method_remap,
+            closure_name_to_function,
             struct_id_map,
             next_struct_id,
             ctx,
@@ -354,6 +389,7 @@ fn lower_global_init(init: &HirExpr, ctx: &mut PassContext) -> Option<MirExpr> {
             ty: TypeId::from_raw(0),
         },
         HirExpr::Undefined | HirExpr::Unit => MirExpr::Unit,
+        HirExpr::Global { name, .. } => MirExpr::Global(name.clone()),
         other => {
             ctx.warning(
                 "P0006",
